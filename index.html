@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Watch & Memo</title>
+    <!-- Modern Reset & Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="./css/style.css">
+    <link rel="manifest" href="./manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <!-- Icons (Phosphor Icons - supports file:// if we use SVG, but CDN is fine for now as per spec "external deps permissible") -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+</head>
+
+<body>
+
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo">
+                <i class="ph ph-trend-up"></i>
+                <h1>StockWatch</h1>
+            </div>
+
+            <div class="search-bar">
+                <i class="ph ph-magnifying-glass"></i>
+                <input type="text" id="searchInput" placeholder="銘柄名、ティッカー、タグ、理由で検索...">
+            </div>
+
+            <div class="header-actions">
+                <button class="btn btn-icon" id="toggleThemeBtn" title="ダークモード切替">
+                    <i class="ph ph-moon"></i>
+                </button>
+                <button class="btn btn-secondary" id="openSettingsBtn">
+                    <i class="ph ph-gear"></i> 設定
+                </button>
+                <button class="btn btn-primary" id="addStockBtn">
+                    <i class="ph ph-plus"></i> 追加
+                </button>
+            </div>
+        </header>
+
+        <div class="main-layout">
+            <!-- Sidebar Filters -->
+            <aside class="sidebar">
+                <div class="filter-section">
+                    <h3>市場</h3>
+                    <label class="checkbox-box">
+                        <input type="checkbox" name="market" value="JP" checked> 日本株 (JP)
+                    </label>
+                    <label class="checkbox-box">
+                        <input type="checkbox" name="market" value="US" checked> 米国株 (US)
+                    </label>
+                    <label class="checkbox-box">
+                        <input type="checkbox" name="market" value="OTHER" checked> その他
+                    </label>
+                </div>
+
+                <div class="filter-section">
+                    <h3>投資したい度</h3>
+                    <label class="range-filter">
+                        <input type="range" id="filterScoreMin" min="0" max="100" value="0">
+                        <span id="filterScoreLabel">0点以上</span>
+                    </label>
+                </div>
+
+                <div class="filter-section">
+                    <h3>タグ</h3>
+                    <div id="tagFilterContainer" class="tag-cloud">
+                        <!-- Tags dynamic injection -->
+                    </div>
+                </div>
+
+                <div class="filter-section">
+                    <button class="btn btn-outline small" id="resetFiltersBtn">フィルタをリセット</button>
+                </div>
+            </aside>
+
+            <!-- Main Content (Stock List) -->
+            <main class="content-area">
+                <div class="toolbar">
+                    <div class="sort-controls">
+                        <label>並び替え:</label>
+                        <select id="sortSelect">
+                            <option value="score_desc">投資したい度 (高い順)</option>
+                            <option value="date_desc">登録日 (新しい順)</option>
+                            <option value="perf_desc">騰落率 (高い順)</option>
+                        </select>
+                    </div>
+                    <div class="view-stats">
+                        表示中: <span id="filteredCount">0</span> / 全 <span id="totalCount">0</span> 銘柄
+                    </div>
+                </div>
+
+                <div id="stockGrid" class="stock-grid">
+                    <!-- Cards injected here -->
+                    <div class="empty-state">
+                        <i class="ph ph-circles-three-plus"></i>
+                        <p>銘柄が登録されていません。<br>右上の「追加」ボタンから登録しましょう。</p>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Modal: Add/Edit Stock -->
+    <dialog id="stockModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">銘柄を追加</h2>
+                <button class="close-modal-btn" id="closeModalBtn"><i class="ph ph-x"></i></button>
+            </div>
+            <form id="stockForm">
+                <input type="hidden" id="editId" name="id">
+
+                <div class="form-row">
+                    <div class="form-group half">
+                        <label for="ticker">ティッカー/コード <span class="required">*</span></label>
+                        <input type="text" id="ticker" name="ticker" required placeholder="Ex: 7203.T, AAPL">
+                    </div>
+                    <div class="form-group half">
+                        <label for="name">銘柄名 <span class="required">*</span></label>
+                        <input type="text" id="name" name="name" required placeholder="Ex: トヨタ自動車">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>市場 <span class="required">*</span></label>
+                    <div class="radio-group">
+                        <label><input type="radio" name="market" value="JP" checked> 日本 (JP)</label>
+                        <label><input type="radio" name="market" value="US"> 米国 (US)</label>
+                        <label><input type="radio" name="market" value="OTHER"> その他</label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="reason">買いたい理由 <span class="required">*</span></label>
+                    <textarea id="reason" name="reason" rows="3" required
+                        placeholder="なぜこの株が欲しい？ストーリーや根拠を記録..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>投資したい度 (Conviction Score) <span class="live-score" id="scoreValue">50</span>点</label>
+                    <input type="range" id="convictionScore" name="convictionScore" min="0" max="100" value="50"
+                        class="score-slider">
+                    <div class="score-labels">
+                        <span>様子見</span>
+                        <span>打診買い</span>
+                        <span>全力🔥</span>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group third">
+                        <label for="per">PER (倍)</label>
+                        <input type="number" id="per" name="per" step="0.1" placeholder="Ex: 15.0">
+                    </div>
+                    <div class="form-group third">
+                        <label for="pbr">PBR (倍)</label>
+                        <input type="number" id="pbr" name="pbr" step="0.01" placeholder="Ex: 1.2">
+                    </div>
+                    <div class="form-group third">
+                        <label for="dividendYield">配当利回り (%)</label>
+                        <input type="number" id="dividendYield" name="dividendYield" step="0.01" placeholder="Ex: 3.5">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="memo">メモ (任意)</label>
+                    <textarea id="memo" name="memo" rows="2" placeholder="決算予定日、リスク要因など"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="tags">タグ (カンマ区切り)</label>
+                    <input type="text" id="tags" name="tags" placeholder="AI, 高配当, 半導体">
+                </div>
+
+                <div class="form-divider">株価情報 (Optional)</div>
+
+                <div class="form-row">
+                    <div class="form-group half">
+                        <label for="entryPrice">登録時株価</label>
+                        <input type="number" id="entryPrice" name="entryPrice" step="any" placeholder="現在の株価">
+                    </div>
+                    <div class="form-group half checkbox-align">
+                        <label class="checkbox-box">
+                            <input type="checkbox" id="fetchPriceNow"> ネットから現在値を取得する
+                        </label>
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-outline" id="cancelBtn">キャンセル</button>
+                    <button type="submit" class="btn btn-primary">保存する</button>
+                </div>
+            </form>
+        </div>
+    </dialog>
+
+    <!-- Modal: Settings & Data -->
+    <dialog id="settingsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>設定 / データ管理</h2>
+                <button class="close-modal-btn" id="closeSettingsBtn"><i class="ph ph-x"></i></button>
+            </div>
+
+            <div class="settings-section">
+                <h3>データ管理</h3>
+                <div class="settings-row">
+                    <div>
+                        <p>現在のデータをファイル(JSON)に書き出します。</p>
+                        <small style="color:var(--text-muted);" id="lastExportTime">最終エクスポート: 未実行</small>
+                    </div>
+                    <button class="btn btn-outline" id="exportBtn"><i class="ph ph-download-simple"></i> エクスポート</button>
+                </div>
+                <div class="settings-row">
+                    <div>
+                        <p>JSONファイルを読み込んでデータを復元します。</p>
+                        <small style="color:var(--text-muted);" id="lastImportTime">最終インポート: 未実行</small>
+                    </div>
+                    <label class="btn btn-outline">
+                        <i class="ph ph-upload-simple"></i> インポート
+                        <input type="file" id="importFile" accept=".json" hidden>
+                    </label>
+                </div>
+                <div
+                    style="background:var(--bg-color); padding:0.75rem; border-radius: var(--radius); margin-bottom: 1rem; font-size: 0.85rem; color: var(--text-muted);">
+                    <strong><i class="ph ph-info"></i> デバイス間同期の手順 (iPhone ⇔ PC)</strong>
+                    <ol style="margin-left: 1.2rem; margin-top: 0.25rem;">
+                        <li>元の端末で「エクスポート」してJSONを保存</li>
+                        <li>iCloud Drive / AirDrop でその他端末にJSONを送る</li>
+                        <li>その他端末で「インポート」して読み込む</li>
+                    </ol>
+                </div>
+
+                <div class="settings-row danger-zone">
+                    <p>全てのデータを削除します。(元に戻せません)</p>
+                    <button class="btn btn-danger" id="deleteAllBtn">全データ削除</button>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h3>株価取得設定 (Alpha Vantage / Mock)</h3>
+                <div class="form-group">
+                    <label for="apiKey">API Key (Optional)</label>
+                    <input type="text" id="apiKey" placeholder="Alpha Vantage API Key">
+                    <small>キーがない場合、またはローカルファイル制限(CORS)がある場合は手動入力モードになります。</small>
+                </div>
+            </div>
+        </div>
+    </dialog>
+
+    <script src="./js/db.js"></script>
+    <script src="./js/api.js"></script>
+    <script src="./js/app.js"></script>
+</body>
+
+</html>
